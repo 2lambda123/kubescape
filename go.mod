@@ -28,6 +28,7 @@ require (
 	github.com/kubescape/rbac-utils v0.0.21-0.20230806101615-07e36f555520
 	github.com/kubescape/regolibrary v1.0.291-rc.0
 	github.com/libgit2/git2go/v33 v33.0.9
+	github.com/matthyx/go-gitlog v0.0.0-20230922124137-a41093459452
 	github.com/mattn/go-isatty v0.0.19
 	github.com/mikefarah/yq/v4 v4.29.1
 	github.com/olekukonko/tablewriter v0.0.6-0.20230417144759-edd1a71a5576
@@ -332,6 +333,7 @@ require (
 	github.com/titanous/rocacheck v0.0.0-20171023193734-afe73141d399 // indirect
 	github.com/tjfoc/gmsm v1.3.2 // indirect
 	github.com/transparency-dev/merkle v0.0.2 // indirect
+	github.com/tsuyoshiwada/go-gitcmd v0.0.0-20180205145712-5f1f5f9475df // indirect
 	github.com/ulikunitz/xz v0.5.10 // indirect
 	github.com/uptrace/opentelemetry-go-extra/otelutil v0.2.2 // indirect
 	github.com/uptrace/opentelemetry-go-extra/otelzap v0.2.2 // indirect
@@ -414,7 +416,6 @@ require (
 replace github.com/libgit2/git2go/v33 => ./git2go
 
 replace (
-
 	// Using the forked version of tablewriter
 	github.com/olekukonko/tablewriter => github.com/kubescape/tablewriter v0.0.6-0.20230907094812-c8c737a432a6
 	// TODO(vladklokun): Since later versions (e.g. v0.40.0) that get used without the pin introduce weird packaging issues probably due to package renames, pin to last known good.
