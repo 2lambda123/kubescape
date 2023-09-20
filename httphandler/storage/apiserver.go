@@ -55,6 +55,9 @@ func GetStorage() *APIServerStore {
 
 // NewAPIServerStorage initializes the APIServerStore struct
 func NewAPIServerStorage(namespace string, config *rest.Config) (*APIServerStore, error) {
+	// disable rate limiting
+	config.QPS = 0
+	config.RateLimiter = nil
 	clientset, err := versioned.NewForConfig(config)
 	if err != nil {
 		return nil, err
@@ -81,6 +84,9 @@ func (a *APIServerStore) StorePostureReportResults(ctx context.Context, pr *v2.P
 }
 
 func getControlsMapFromResult(ctx context.Context, result *resourcesresults.Result, controlSummaries reportsummary.ControlSummaries) map[string]v1beta1.ScannedControl {
+	ctx, span := otel.Tracer("").Start(ctx, "APIServerStore.getControlsMapFromResult")
+	defer span.End()
+
 	m := map[string]v1beta1.ScannedControl{}
 
 	for i := range result.AssociatedControls {
@@ -122,7 +128,10 @@ func (a *APIServerStore) GetWorkloadConfigurationScanResult(ctx context.Context,
 	return manifest, nil
 }
 
-func findResourceInReport(resourceID string, report *v2.PostureReport) (*reporthandling.Resource, error) {
+func findResourceInReport(ctx context.Context, resourceID string, report *v2.PostureReport) (*reporthandling.Resource, error) {
+	ctx, span := otel.Tracer("").Start(ctx, "APIServerStore.findResourceInReport")
+	defer span.End()
+
 	for i := range report.Resources {
 		if report.Resources[i].ResourceID == resourceID {
 			return &report.Resources[i], nil
@@ -141,12 +150,15 @@ func (a *APIServerStore) getResourceNamespace(resource workloadinterface.IMetada
 }
 
 func (a *APIServerStore) StoreWorkloadConfigurationScanResult(ctx context.Context, report *v2.PostureReport, result *resourcesresults.Result) (*v1beta1.WorkloadConfigurationScan, error) {
-	resource, err := findResourceInReport(result.ResourceID, report)
+	ctx, span := otel.Tracer("").Start(ctx, "APIServerStore.StoreWorkloadConfigurationScanResult")
+	defer span.End()
+
+	resource, err := findResourceInReport(ctx, result.ResourceID, report)
 	if err != nil {
 		return nil, err
 	}
 
-	relatedObjects := getRelatedObjects(resource)
+	relatedObjects := getRelatedObjects(ctx, resource)
 	name, err := GetWorkloadScanK8sResourceName(ctx, resource, relatedObjects)
 
 	if err != nil {
@@ -172,7 +184,9 @@ func (a *APIServerStore) StoreWorkloadConfigurationScanResult(ctx context.Contex
 	}
 
 	// This is a workaround for the fact that the apiserver does not return already exist error on Create
+	_, span2 := otel.Tracer("").Start(ctx, "WorkloadConfigurationScans.Get")
 	existing, err := a.StorageClient.WorkloadConfigurationScans(namespace).Get(context.Background(), manifest.Name, metav1.GetOptions{})
+	span2.End()
 	if err == nil {
 		logger.L().Debug("found existing WorkloadConfigurationScan manifest in storage - merging manifests", helpers.String("name", manifest.Name))
 		manifest.Annotations = existing.Annotations
@@ -180,13 +194,17 @@ func (a *APIServerStore) StoreWorkloadConfigurationScanResult(ctx context.Contex
 		manifest.Spec = mergeWorkloadConfigurationScanSpec(existing.Spec, manifest.Spec)
 	}
 
+	_, span2 = otel.Tracer("").Start(ctx, "WorkloadConfigurationScans.Create")
 	_, err = a.StorageClient.WorkloadConfigurationScans(namespace).Create(context.Background(), &manifest, metav1.CreateOptions{})
+	span2.End()
 	switch {
 	case errors.IsAlreadyExists(err):
 		retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			// retrieve the latest version before attempting update
 			// RetryOnConflict uses exponential backoff to avoid exhausting the apiserver
+			_, span2 = otel.Tracer("").Start(ctx, "WorkloadConfigurationScans.Get")
 			result, getErr := a.StorageClient.WorkloadConfigurationScans(namespace).Get(context.Background(), manifest.Name, metav1.GetOptions{})
+			span2.End()
 			if getErr != nil {
 				return getErr
 			}
@@ -196,7 +214,9 @@ func (a *APIServerStore) StoreWorkloadConfigurationScanResult(ctx context.Contex
 			result.Spec = mergeWorkloadConfigurationScanSpec(result.Spec, manifest.Spec)
 			manifest = *result
 			// try to send the updated workload configuration scan manifest
+			_, span2 = otel.Tracer("").Start(ctx, "WorkloadConfigurationScans.Update")
 			_, updateErr := a.StorageClient.WorkloadConfigurationScans(namespace).Update(context.Background(), result, metav1.UpdateOptions{})
+			span2.End()
 			return updateErr
 		})
 		if retryErr != nil {
@@ -344,6 +364,9 @@ func updateLabelsAndAnnotationsMapFromRelatedObjects(m map[string]string, relate
 }
 
 func getManifestObjectLabelsAndAnnotations(ctx context.Context, resource workloadinterface.IMetadata, relatedObjects []workloadinterface.IMetadata) (labels map[string]string, annotations map[string]string, err error) {
+	ctx, span := otel.Tracer("").Start(ctx, "APIServerStore.getManifestObjectLabelsAndAnnotations")
+	defer span.End()
+
 	m := make(map[string]string)
 	m[v1.ApiGroupMetadataKey], m[v1.ApiVersionMetadataKey] = k8sinterface.SplitApiVersion(resource.GetApiVersion())
 	m[v1.KindMetadataKey] = resource.GetKind()
@@ -369,7 +392,10 @@ func getManifestObjectLabelsAndAnnotations(ctx context.Context, resource workloa
 // getRelatedObjects returns a list of related objects for the given resource
 // This is only relevant for RegoResponseVector objects (which are a triplet of <Subject, Role, RoleBinding>
 // For other objects, an empty list is returned
-func getRelatedObjects(resource *reporthandling.Resource) []workloadinterface.IMetadata {
+func getRelatedObjects(ctx context.Context, resource *reporthandling.Resource) []workloadinterface.IMetadata {
+	ctx, span := otel.Tracer("").Start(ctx, "APIServerStore.getRelatedObjects")
+	defer span.End()
+
 	obj := resource.GetObject()
 	if !objectsenvelopes.IsTypeRegoResponseVector(obj) {
 		return []workloadinterface.IMetadata{}
@@ -396,6 +422,9 @@ func getRoleAndRoleBindingFromRelatedObjects(relatedObjects []workloadinterface.
 }
 
 func GetWorkloadScanK8sResourceName(ctx context.Context, resource workloadinterface.IMetadata, relatedObjects []workloadinterface.IMetadata) (string, error) {
+	ctx, span := otel.Tracer("").Start(ctx, "APIServerStore.GetWorkloadScanK8sResourceName")
+	defer span.End()
+
 	if len(relatedObjects) == 0 {
 		return names.ResourceToSlug(resource)
 	}
