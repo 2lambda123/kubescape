@@ -1,5 +1,11 @@
 package cautils
 
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
 func (s *LocalGitRepositoryTestSuite) TestGetLastCommit() {
 	if localRepo, err := NewLocalGitRepository(s.gitRepositoryPaths["localrepo"]); s.NoError(err) {
 		if commit, err := localRepo.GetLastCommit(); s.NoError(err) {
@@ -40,4 +46,13 @@ func (s *LocalGitRepositoryTestSuite) TestGetFileLastCommit() {
 
 		}
 	})
+}
+
+func BenchmarkBuildCommitMap(b *testing.B) {
+	localRepo, err := NewLocalGitRepository("testdata/temp/localrepo")
+	assert.NoError(b, err)
+	for i := 0; i < b.N; i++ {
+		localRepo.buildCommitMap()
+	}
+	b.ReportAllocs()
 }

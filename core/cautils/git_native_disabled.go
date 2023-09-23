@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kubescape/go-git-url/apis"
+	"github.com/kubescape/go-logger"
 	"github.com/matthyx/go-gitlog"
 )
 
@@ -25,34 +26,7 @@ func newGitRepository(root string) (*gitRepository, error) {
 
 func (g *gitRepository) GetFileLastCommit(filePath string) (*apis.Commit, error) {
 	if len(g.fileToLastCommit) == 0 {
-		filePathToCommitTime := map[string]time.Time{}
-		filePathToCommit := map[string]*gitlog.Commit{}
-		allCommits, _ := g.gitRepo.Log(nil, nil)
-
-		// builds a map of all files to their last commit
-		for _, commit := range allCommits {
-			// Ignore merge commits (2+ parents)
-			if len(commit.Parents) > 1 {
-				continue
-			}
-
-			for _, file := range commit.Files {
-				commitTime := commit.Author.Date
-
-				// In case we have the commit information for the file which is not the latest - we override it
-				if currentCommitTime, exists := filePathToCommitTime[file]; exists {
-					if currentCommitTime.Before(commitTime) {
-						filePathToCommitTime[file] = commitTime
-						filePathToCommit[file] = commit
-					}
-				} else {
-					filePathToCommitTime[file] = commitTime
-					filePathToCommit[file] = commit
-				}
-			}
-		}
-
-		g.fileToLastCommit = filePathToCommit
+		g.buildCommitMap()
 	}
 
 	if relevantCommit, exists := g.fileToLastCommit[filePath]; exists {
@@ -60,6 +34,38 @@ func (g *gitRepository) GetFileLastCommit(filePath string) (*apis.Commit, error)
 	}
 
 	return nil, fmt.Errorf("failed to get commit information for file: %s", filePath)
+}
+
+func (g *gitRepository) buildCommitMap() {
+	filePathToCommitTime := map[string]time.Time{}
+	filePathToCommit := map[string]*gitlog.Commit{}
+	logger.L().Info("using go-gitlog to get all commit information")
+	allCommits, _ := g.gitRepo.Log(nil, nil)
+
+	// builds a map of all files to their last commit
+	for _, commit := range allCommits {
+		// Ignore merge commits (2+ parents)
+		if len(commit.Parents) > 1 {
+			continue
+		}
+
+		for _, file := range commit.Files {
+			commitTime := commit.Author.Date
+
+			// In case we have the commit information for the file which is not the latest - we override it
+			if currentCommitTime, exists := filePathToCommitTime[file]; exists {
+				if currentCommitTime.Before(commitTime) {
+					filePathToCommitTime[file] = commitTime
+					filePathToCommit[file] = commit
+				}
+			} else {
+				filePathToCommitTime[file] = commitTime
+				filePathToCommit[file] = commit
+			}
+		}
+	}
+
+	g.fileToLastCommit = filePathToCommit
 }
 
 func (g *gitRepository) getCommit(commit *gitlog.Commit) *apis.Commit {
