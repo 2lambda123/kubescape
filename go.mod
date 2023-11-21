@@ -184,7 +184,7 @@ require (
 	github.com/go-git/go-billy/v5 v5.4.1 // indirect
 	github.com/go-gota/gota v0.12.0 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
-	github.com/go-jose/go-jose/v3 v3.0.0 // indirect
+	github.com/go-jose/go-jose/v3 v3.0.1 // indirect
 	github.com/go-logr/logr v1.2.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-openapi/analysis v0.21.4 // indirect
@@ -414,7 +414,6 @@ require (
 replace github.com/libgit2/git2go/v33 => ./git2go
 
 replace (
-
 	// Using the forked version of tablewriter
 	github.com/olekukonko/tablewriter => github.com/kubescape/tablewriter v0.0.6-0.20230907094812-c8c737a432a6
 	// TODO(vladklokun): Since later versions (e.g. v0.40.0) that get used without the pin introduce weird packaging issues probably due to package renames, pin to last known good.
